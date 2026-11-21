@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<title>통역 동행</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <!-- 상대방용 상단(대면 모드에서 180° 회전) -->
+  <section id="partnerPane" class="pane partner hidden">
+    <div class="paneHead"><span id="partnerFlag"></span><span id="partnerStatus"></span></div>
+    <div id="partnerLog" class="log"></div>
+  </section>
+
+  <section id="mainPane" class="pane">
+    <header>
+      <div class="brand">🌏 통역 동행</div>
+      <div class="headBtns">
+        <button id="btnHistory" class="icon" title="상담 기록">🗂</button>
+        <button id="btnSettings" class="icon" title="설정">⚙️</button>
+      </div>
+    </header>
+
+    <div class="controls">
+      <label>상대 언어
+        <select id="selLang"></select>
+      </label>
+      <label>전문 모드
+        <select id="selDomain"></select>
+      </label>
+    </div>
+    <div class="engines" id="engines"></div>
+    <div class="usage" id="usage"></div>
+
+    <div id="log" class="log"></div>
+    <div id="interim" class="interim"></div>
+
+    <div class="statusBar"><span id="status">▶ 를 누르면 통역이 시작됩니다</span></div>
+
+    <footer>
+      <button id="btnFace" class="small" title="폴드 대면 모드">🔄 대면</button>
+      <button id="btnSide" class="small hidden" title="화자 전환(무료모드)">👤 나</button>
+      <button id="btnPlay" class="play">▶</button>
+      <button id="btnBig" class="small" title="큰 글씨">🔠</button>
+      <button id="btnBrief" class="small" title="종료 후 브리핑">📝 브리핑</button>
+    </footer>
+  </section>
+</div>
+
+<!-- 모달 공용 -->
+<div id="modal" class="modal hidden"><div class="modalBox" id="modalBox"></div></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
