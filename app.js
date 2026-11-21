@@ -168,7 +168,7 @@ function openSettings() {
   <h4>💾 백업 / 복원 (폰 교체·초기화 대비)</h4>
   <div class="row"><button class="btn gray" id="sBak">백업 파일 받기</button><button class="btn gray" id="sRes">백업 불러오기</button></div>
   <p class="note">백업에는 기록·단어장·설정이 들어가며 API 키는 제외됩니다.</p>
-  <p class="note">버전 v3.3 <button class="mini" id="sUpd">🔄 최신 버전으로 업데이트</button></p>`);
+  <p class="note">버전 v3.4 <button class="mini" id="sUpd">🔄 최신 버전으로 업데이트</button></p>`);
   $('sUpd').onclick = forceUpdate;
   const read = () => ({ counselor: $('sName').value.trim(), gemini: $('sGem').value.trim(), openai: $('sOai').value.trim(),
     limit: Number($('sLim').value) || 0, rate: Number($('sRate').value), realtimeModel: $('sRt').value });

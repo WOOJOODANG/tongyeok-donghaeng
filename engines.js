@@ -18,7 +18,14 @@ async function checkOpenAI(res) {
 export function geminiGenerate(key, system, text, opts = {}) { return geminiParts(key, system, [{ text }], opts); }
 // parts: [{text}] 또는 [{inlineData:{mimeType,data}}] — 음성 평가에도 사용
 // 모델 자동 선택: 구글이 모델을 바꿔도 동작하도록 후보를 차례로 시도하고, 실패 시 사용 가능 목록에서 자동 탐색
-const GEMINI_CANDIDATES = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3-flash', 'gemini-2.5-flash'];
+const GEMINI_CANDIDATES = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3-flash', 'gemini-3.8-flash-lite', 'gemini-flash-lite-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash'];
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function listGemini(key) {
+  const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': key } });
+  if (!r.ok) return [];
+  return ((await r.json()).models || []).filter(m => (m.supportedGenerationMethods || []).includes('generateContent')).map(m => m.name.replace('models/', ''))
+    .filter(n => /gemini/.test(n) && /flash/.test(n) && !/image|tts|live|audio|embedding/.test(n)).slice(0, 8);
+}
 async function discoverGemini(key) {
   const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': key } });
   if (!r.ok) return null;
@@ -39,7 +46,7 @@ async function geminiCall(key, model, system, parts, json, thinking) {
 export async function geminiParts(key, system, parts, { json = false } = {}) {
   if (!key) throw new KeyError('⚙️ 설정에서 Gemini 키를 입력하세요.');
   const saved = localStorage.getItem('tyd_geminiModel');
-  const tried = new Set(); let queue = [...new Set([saved, ...GEMINI_CANDIDATES].filter(Boolean))], discovered = false, lastMsg = '';
+  const tried = new Set(); let queue = [...new Set([saved, ...GEMINI_CANDIDATES].filter(Boolean))], discovered = false, lastMsg = '', over = false; const retried = new Set();
   while (queue.length) {
     const model = queue.shift(); if (tried.has(model)) continue; tried.add(model);
     let res = await geminiCall(key, model, system, parts, json, true);
@@ -57,6 +64,13 @@ export async function geminiParts(key, system, parts, { json = false } = {}) {
     lastMsg = b?.error?.message || res.statusText;
     if (res.status === 403 || (res.status === 400 && /API key/i.test(lastMsg))) throw new KeyError('Gemini 키가 올바르지 않습니다.');
     if (res.status === 429) throw new Error('Gemini 무료 사용량을 잠시 초과했습니다. 1분 후 다시 시도하세요.');
+    // 503/500: 일시 과부하 → 같은 모델 1회 재시도 후 다른 모델로 자동 전환
+    if (res.status === 503 || res.status === 500 || res.status === 502 || res.status === 504) {
+      over = true;
+      if (!retried.has(model)) { retried.add(model); await sleep(1200); tried.delete(model); queue.unshift(model); continue; }
+      if (!queue.length && !discovered) { discovered = true; const all = await listGemini(key); queue.push(...all.filter(m => !tried.has(m))); }
+      continue;
+    }
     if (res.status === 404 || res.status === 400) {
       if (saved === model) localStorage.removeItem('tyd_geminiModel');
       const hint = (lastMsg.match(/models\/([\w.-]+)/g) || []).map(x => x.replace('models/', '')).filter(x => x !== model);
@@ -66,6 +80,7 @@ export async function geminiParts(key, system, parts, { json = false } = {}) {
     }
     throw new Error(`Gemini 오류 (${res.status}): ${lastMsg}`);
   }
+  if (over) throw new Error('구글 서버가 일시적으로 혼잡합니다(키는 정상). 1~2분 후 다시 시도해 주세요.');
   throw new Error('사용 가능한 Gemini 모델을 찾지 못했습니다: ' + lastMsg);
 }
 
