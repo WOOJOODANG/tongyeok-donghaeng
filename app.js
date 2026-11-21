@@ -160,6 +160,7 @@ function openSettings() {
      <option value="gpt-realtime" ${s.realtimeModel === 'gpt-realtime' ? 'selected' : ''}>gpt-realtime (최고 품질·비쌈)</option></select></div>
   <p class="note">🔐 키는 이 기기(브라우저)에만 저장되며 어디에도 전송·업로드되지 않습니다(각 AI 회사 호출 제외).</p>
   <div class="row"><button class="btn" id="sSave">저장</button><button class="btn gray" id="sTest">키 테스트</button><button class="btn gray" id="sX">닫기</button></div>
+  <div id="sMsg" class="testMsg"></div>
   <div class="row"><button class="btn gray" id="sReset">이번 달 사용액 초기화</button></div>
   <h4>📒 나만의 용어집 (통역에 항상 적용)</h4>
   <p class="note">한 줄에 하나씩: 한국어 = 원하는 번역 (예: 도수치료 = manual therapy)</p>
@@ -167,7 +168,7 @@ function openSettings() {
   <h4>💾 백업 / 복원 (폰 교체·초기화 대비)</h4>
   <div class="row"><button class="btn gray" id="sBak">백업 파일 받기</button><button class="btn gray" id="sRes">백업 불러오기</button></div>
   <p class="note">백업에는 기록·단어장·설정이 들어가며 API 키는 제외됩니다.</p>
-  <p id="sMsg" class="note"></p>`);
+  <p class="note">버전 v3.1</p>`);
   const read = () => ({ counselor: $('sName').value.trim(), gemini: $('sGem').value.trim(), openai: $('sOai').value.trim(),
     limit: Number($('sLim').value) || 0, rate: Number($('sRate').value), realtimeModel: $('sRt').value });
   $('sBak').onclick = () => {
@@ -184,15 +185,15 @@ function openSettings() {
     LS.set('glossary', $('sGlo').value.split('\n').map(l => l.split('=')).filter(p => p.length >= 2 && p[0].trim() && p[1].trim()).map(p => ({ ko: p[0].trim(), en: p.slice(1).join('=').trim() })));
     S.settings = read(); LS.set('settings', S.settings); if (S.engine !== 'free' && !hasOpenAI()) S.engine = 'free'; renderEngines(); renderUsage(); closeModal(); };
   $('sX').onclick = closeModal;
-  $('sReset').onclick = () => { const u = LS.get('usage', {}); delete u[monthKey()]; LS.set('usage', u); renderUsage(); $('sMsg').textContent = '초기화했습니다.'; };
+  $('sReset').onclick = () => { const u = LS.get('usage', {}); delete u[monthKey()]; LS.set('usage', u); renderUsage(); alert('초기화했습니다.'); };
   $('sTest').onclick = async () => {
     const v = read(); const out = [];
-    $('sMsg').textContent = '테스트 중…';
+    $('sMsg').textContent = '⏳ 테스트 중… (최대 10초)'; $('sTest').disabled = true;
     if (v.gemini) { try { out.push('Gemini ✅ ' + await geminiGenerate(v.gemini, 'Translate to English. Output only translation.', '안녕하세요')); } catch (e) { out.push('Gemini ❌ ' + e.message); } }
     else out.push('Gemini: 키 없음');
     if (v.openai) { try { await openaiChat(v.openai, 'Reply OK', 'ping'); out.push('OpenAI ✅ 사용 가능(잔액 있음)'); } catch (e) { out.push('OpenAI ❌ ' + e.message); } }
     else out.push('OpenAI: 키 없음 (유료 모드 잠금)');
-    $('sMsg').innerHTML = out.map(esc).join('<br>');
+    $('sMsg').innerHTML = out.map(esc).join('<br>'); $('sTest').disabled = false; $('sMsg').scrollIntoView({ block: 'center', behavior: 'smooth' });
   };
 }
 
