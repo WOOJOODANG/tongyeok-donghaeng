@@ -1,6 +1,6 @@
 // v4 추가 기능: 📷 사진 번역 / 👤 고객 관리 / 📤 공유(FC·학생) / 📴 오프라인 통역 / 💳 계정·요금제(테스트 모드)
-import { LANGS, KO, DOMAINS } from './config.js?v=40';
-import { geminiParts, geminiGenerate } from './engines.js?v=40';
+import { LANGS, KO, DOMAINS } from './config.js?v=41';
+import { geminiParts, geminiGenerate } from './engines.js?v=41';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));

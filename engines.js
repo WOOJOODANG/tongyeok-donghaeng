@@ -1,5 +1,6 @@
 // 통역 엔진 3종: free(Web Speech+Gemini) / eco(OpenAI 분할) / premium(OpenAI Realtime)
-import { LANGS, KO, translatePrompt } from './config.js?v=40';
+import { LANGS, KO, translatePrompt } from './config.js?v=41';
+import { speakOut, stopSpeaking } from './voice.js?v=41';
 
 export class QuotaError extends Error { constructor(m) { super(m); this.name = 'QuotaError'; } }
 export class KeyError extends Error { constructor(m) { super(m); this.name = 'KeyError'; } }
@@ -158,21 +159,15 @@ export class FreeEngine extends Base {
       await this.speak(tr.replace(/ ⓞ$/, '').replace(/^\(오프라인 — 번역 불가\) /, ''), to.bcp);
     } catch (e) { this.o.onError(e); if (e instanceof KeyError) this.stop(); }
   }
-  speak(text, bcp) {
-    return new Promise(res => {
-      if (!this.running) return res();
-      this.status('🔊 재생 중…', 'speak'); this.o.onSpeaking?.(true);
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = bcp; u.rate = this.o.rate || 1.0;
-      const v = this.voices.find(v => v.lang.replace('_', '-').startsWith(bcp.slice(0, 2)) && /google/i.test(v.name)) || this.voices.find(v => v.lang.replace('_', '-').startsWith(bcp.slice(0, 2)));
-      if (v) u.voice = v;
-      const done = () => { this.o.onSpeaking?.(false); res(); };
-      u.onend = done; u.onerror = done;
-      speechSynthesis.cancel(); speechSynthesis.speak(u);
-      setTimeout(done, 4000 + text.length * 150); // 안전장치
-    });
+  async speak(text, bcp) {
+    if (!this.running) return;
+    this.status('🔊 통역 음성 재생 중…', 'speak'); this.o.onSpeaking?.(true);
+    const how = await speakOut(text, bcp, this.o.rate || 1.0);
+    this.o.onSpeaking?.(false);
+    if (!how && this.running) this.o.onError(new Error('🔇 음성이 재생되지 않았습니다. 폰 볼륨(미디어)과 무음모드를 확인하세요. ⚙️ 설정 → 소리 테스트'));
+    await new Promise(r => setTimeout(r, 300)); // 스피커 잔향이 마이크에 잡히지 않게
   }
-  stop() { this.running = false; try { this.rec?.abort(); } catch {} speechSynthesis.cancel(); this.status('정지됨', 'idle'); }
+  stop() { this.running = false; try { this.rec?.abort(); } catch {} stopSpeaking(); this.status('정지됨', 'idle'); }
 }
 
 // ---------- ② 절약: 마이크 VAD 분할 → gpt-4o-mini-transcribe → gpt-4o-mini → gpt-4o-mini-tts ----------

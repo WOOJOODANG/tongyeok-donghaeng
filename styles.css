@@ -93,3 +93,4 @@ footer{display:flex;align-items:center;justify-content:space-between;gap:6px;pad
 .kv{width:100%;border-collapse:collapse;font-size:.9em}.kv th,.kv td{border-bottom:1px solid var(--line);padding:6px;text-align:left;vertical-align:top}.kv th{width:32%;color:#7dd3fc;font-weight:600}
 .news li{margin:6px 0;line-height:1.5}
 details summary{cursor:pointer;margin:8px 0}
+.bigSub{border-radius:14px;padding:12px 14px;margin:4px 0;line-height:1.35}.bigSub.me{background:#075985}.bigSub.partner{background:#4c1d95}.bigSub .who{font-size:.72em;opacity:.8}.bigSub .txt{font-size:1.45em;font-weight:800;margin:4px 0}.bigSub .src{font-size:.8em;opacity:.75}

@@ -1,7 +1,8 @@
-import { LANGS, KO, DOMAINS, ENGINES, COST_PER_MIN, QUICK, briefingPrompt, translatePrompt } from './config.js?v=40';
-import { openPractice } from './practice.js?v=40';
-import { initExtras, openAccount, openClients, openPhoto, openShare, openOffline, shareBriefToColleague, clientName, canUse, plan, PLANS, memoSave, offlineTranslate, isOffline } from './extras.js?v=40';
-import { FreeEngine, EcoEngine, PremiumEngine, QuotaError, KeyError, geminiGenerate, openaiChat } from './engines.js?v=40';
+import { LANGS, KO, DOMAINS, ENGINES, COST_PER_MIN, QUICK, briefingPrompt, translatePrompt } from './config.js?v=41';
+import { openPractice } from './practice.js?v=41';
+import { speakOut, unlockAudio, stopSpeaking, voiceInfo, resetVoiceProbe, lastMethod } from './voice.js?v=41';
+import { initExtras, openAccount, openClients, openPhoto, openShare, openOffline, shareBriefToColleague, clientName, canUse, plan, PLANS, memoSave, offlineTranslate, isOffline } from './extras.js?v=41';
+import { FreeEngine, EcoEngine, PremiumEngine, QuotaError, KeyError, geminiGenerate, openaiChat } from './engines.js?v=41';
 
 const $ = id => document.getElementById(id);
 const LS = {
@@ -40,7 +41,8 @@ function init() {
   $('typeSend').onclick = send; $('typeText').onkeydown = e => { if (e.key === 'Enter') send(); };
   if (S.engine !== 'free' && !hasOpenAI()) S.engine = 'free';
   renderEngines(); renderUsage(); renderLog();
-  $('btnPlay').onclick = () => S.running ? stopSession(true) : startSession();
+  $('btnPlay').onclick = () => { unlockAudio(); S.running ? stopSession(true) : startSession(); };
+  document.addEventListener('pointerdown', unlockAudio, { once: true });
   $('btnSettings').onclick = openSettings;
   $('btnMenu').onclick = openMenu;
   $('clientChip').onclick = e => { if (e.target.classList.contains('x')) return setClient(null); openClients(() => {}); };
@@ -111,19 +113,22 @@ async function translateText(fromCode, toCode, text) {
   return '(오프라인 — 번역 불가) ' + text;
 }
 // ---------- 글 입력 / 자주 쓰는 문구 / 다시 듣기 ----------
-function speak(text, bcp) {
-  speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = bcp; u.rate = S.settings.rate || 1;
-  const v = speechSynthesis.getVoices().find(v => v.lang.replace('_', '-').startsWith(bcp.slice(0, 2))); if (v) u.voice = v;
-  speechSynthesis.speak(u);
-}
+function speak(text, bcp) { unlockAudio(); stopSpeaking(); return speakOut(String(text).replace(/ ⓞ$/, ''), bcp, S.settings.rate || 1); }
 async function textTurn(who, text) {
   const pl = LANGS[S.lang]; const from = who === 'me' ? KO : pl, to = who === 'me' ? pl : KO;
   try {
     if (!S.settings.gemini && !hasOpenAI() && !isOffline()) return openSettings();
     const tr = await translateText(who === 'me' ? 'ko' : S.lang, who === 'me' ? S.lang : 'ko', text);
-    S.turns.push({ speaker: who, src: text, dst: tr, t: Date.now() }); renderLog(); autosave();
+    const turn = { speaker: who, src: text, dst: tr, t: Date.now() }; S.turns.push(turn); renderLog(); autosave(); showSub(turn);
     if (!S.running || S.engine === 'free') speak(tr, to.bcp);
   } catch (e) { alertModal('⚠️ 번역 실패', esc(e.message)); }
+}
+let subT = 0;
+function showSub(t) {
+  const el = $('bigSub'); const pl = LANGS[S.lang];
+  el.innerHTML = `<div class="who">${t.speaker === 'me' ? '나 → ' + esc(pl.name) : esc(pl.name) + ' → 한국어'}</div><div class="txt">${esc(t.dst)}</div><div class="src">${esc(t.src)}</div>`;
+  el.className = 'bigSub ' + t.speaker; clearTimeout(subT); subT = setTimeout(() => el.classList.add('hidden'), 12000);
+  el.onclick = () => el.classList.add('hidden');
 }
 function renderQuick() {
   const list = [...LS.get('myQuick', []), ...(QUICK[S.domain] || []), ...(S.domain !== 'general' ? QUICK.general.slice(0, 2) : [])];
@@ -177,6 +182,11 @@ function openSettings() {
   <div class="field"><label>OpenAI API 키 (절약·프리미엄, sk-…) — 비우면 유료 모드 잠금</label><input id="sOai" type="password" value="${esc(s.openai)}" placeholder="sk-..."></div>
   <div class="field"><label>월 사용 한도 (원) — 초과 시 무료 모드 자동 전환</label><input id="sLim" type="number" step="1000" value="${s.limit}"></div>
   <div class="field"><label>말하기 속도</label><select id="sRate">${[0.85, 1.0, 1.15, 1.3].map(r => `<option ${r == s.rate ? 'selected' : ''} value="${r}">${r}x</option>`).join('')}</select></div>
+  <div class="field"><label>🔊 통역 음성 출력 방식</label><select id="sTts">
+     <option value="auto">자동 (폰 음성 → 안 되면 온라인 음성) — 추천</option>
+     <option value="online">온라인 음성 (구글, 인터넷 필요·가장 확실)</option>
+     <option value="phone">폰 내장 음성만 (오프라인 가능)</option></select></div>
+  <div class="row"><button class="btn green" id="sSnd">🔊 소리 테스트 (한국어+상대 언어)</button></div><div id="sSndMsg" class="testMsg"></div>
   <div class="field"><label>프리미엄 모델</label><select id="sRt">
      <option value="gpt-realtime-mini" ${s.realtimeModel === 'gpt-realtime-mini' ? 'selected' : ''}>gpt-realtime-mini (저렴·추천)</option>
      <option value="gpt-realtime" ${s.realtimeModel === 'gpt-realtime' ? 'selected' : ''}>gpt-realtime (최고 품질·비쌈)</option></select></div>
@@ -190,10 +200,20 @@ function openSettings() {
   <h4>💾 백업 / 복원 (폰 교체·초기화 대비)</h4>
   <div class="row"><button class="btn gray" id="sBak">백업 파일 받기</button><button class="btn gray" id="sRes">백업 불러오기</button></div>
   <p class="note">백업에는 기록·단어장·설정이 들어가며 API 키는 제외됩니다.</p>
-  <p class="note">버전 v4.0 <button class="mini" id="sUpd">🔄 최신 버전으로 업데이트</button></p>`);
+  <p class="note">버전 v4.1 <button class="mini" id="sUpd">🔄 최신 버전으로 업데이트</button></p>`);
   $('sUpd').onclick = forceUpdate;
   const read = () => ({ counselor: $('sName').value.trim(), gemini: $('sGem').value.trim(), openai: $('sOai').value.trim(),
     limit: Number($('sLim').value) || 0, rate: Number($('sRate').value), realtimeModel: $('sRt').value });
+  $('sTts').value = LS.get('ttsMode', 'auto');
+  $('sTts').onchange = e => { LS.set('ttsMode', e.target.value); resetVoiceProbe(); };
+  $('sSnd').onclick = async () => {
+    unlockAudio(); const pl = LANGS[S.lang]; $('sSndMsg').textContent = '🔊 재생 중… 소리가 들리는지 확인하세요';
+    const a = await speakOut('안녕하세요. 통역 동행 소리 테스트입니다.', 'ko-KR', 1);
+    const b = await speakOut(pl.welcome, pl.bcp, 1);
+    const nm = m => m === 'phone' ? '폰 음성 ✅' : m === 'online' ? '온라인 음성 ✅' : '❌ 실패';
+    $('sSndMsg').innerHTML = `한국어: ${nm(a)} · ${esc(pl.name)}: ${nm(b)}<br><span class="note">폰 음성: ${esc(voiceInfo(pl.bcp))}</span><br>` +
+      (a && b ? '들리셨으면 정상입니다 👍 안 들리면 볼륨(미디어) 버튼을 올리고 무음/방해금지를 꺼주세요.' : '❌ 소리 재생 실패 → 미디어 볼륨, 블루투스 연결, 무음모드를 확인하고 출력 방식을 "온라인 음성"으로 바꿔보세요.');
+  };
   $('sBak').onclick = () => {
     const data = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('tyd_') && !k.startsWith('tyd_daily_') && !k.startsWith('tyd_course_')) data[k] = localStorage.getItem(k); }
     const st = JSON.parse(data.tyd_settings || '{}'); delete st.gemini; delete st.openai; data.tyd_settings = JSON.stringify(st);
@@ -235,11 +255,13 @@ function openMenu() {
   $('mnX').onclick = closeModal;
 }
 function renderPlan() { const p = plan(); $('planBadge').textContent = p === 'free' ? '무료' : PLANS[p].name; $('planBadge').className = 'planBadge ' + p; }
-const APP_VER = '4.0';
+const APP_VER = '4.1';
 function whatsNew(force) {
   if (!force && LS.get('seenVer', '') === APP_VER) return;
   LS.set('seenVer', APP_VER);
   setTimeout(() => modal(`<h3>🆕 v${APP_VER} 새 기능</h3><ul class="news">
+    <li>🔊 <b>통역 음성 개선</b> — 폰 음성이 안 나오면 자동으로 온라인 음성으로 전환. ⚙️ 설정 → 소리 테스트</li>
+    <li>💬 <b>큰 자막</b> — 통역된 말이 화면 아래에 크게 표시됩니다</li>
     <li>📷 <b>사진 번역</b> — 처방전·진단서·보험/세무 서류를 찍으면 번역 + 핵심 항목 + 주의사항</li>
     <li>👤 <b>고객 관리</b> — 상담 시작 시 고객 선택 → 기록·사진·브리핑이 고객별로 모임, 전체 상담 흐름 요약</li>
     <li>📤 <b>FC·학생 공유</b> — 용어집·문구·단어장을 링크로 전달, 브리핑을 개인정보 없이 동료에게 공유</li>
@@ -255,6 +277,7 @@ async function forceUpdate() {
 }
 // ---------- 세션 ----------
 async function startSession(skipConsent) {
+  unlockAudio();
   if (!S.settings.gemini && S.engine === 'free' && !isOffline()) return openSettings();
   if (isOffline() && S.engine !== 'free') selectEngine('free', true);
   if (!S.consented && !skipConsent) return consentModal();
@@ -262,7 +285,7 @@ async function startSession(skipConsent) {
     partner: S.lang, domain: S.domain, rate: S.settings.rate, realtimeModel: S.settings.realtimeModel,
     keys: { gemini: S.settings.gemini, openai: S.settings.openai },
     translate: translateText,
-    onTurn: t => { S.turns.push(t); renderLog(); autosave(); },
+    onTurn: t => { S.turns.push(t); renderLog(); autosave(); showSub(t); },
     onStatus: setStatus,
     onInterim: (side, txt) => { $('interim').textContent = txt ? (side === 'ko' ? '나: ' : '상대: ') + txt : ''; },
     onUsage: min => addUsage(min, eng),
