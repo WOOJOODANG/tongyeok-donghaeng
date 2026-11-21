@@ -49,7 +49,7 @@ function init() {
   $('btnBrief').onclick = () => S.turns.length ? makeBriefing() : alertModal('📝 브리핑', '아직 대화 내용이 없습니다. ▶ 로 통역을 시작하세요.');
   $('btnSide').onclick = () => { const e = S.engineObj; if (e instanceof FreeEngine) { e.setSide(e.side === 'ko' ? 'partner' : 'ko'); } };
   if (!S.settings.gemini) setTimeout(openSettings, 300);
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
 }
 function renderEngines() {
   $('engines').innerHTML = Object.entries(ENGINES).map(([k, v]) => {
@@ -168,7 +168,8 @@ function openSettings() {
   <h4>💾 백업 / 복원 (폰 교체·초기화 대비)</h4>
   <div class="row"><button class="btn gray" id="sBak">백업 파일 받기</button><button class="btn gray" id="sRes">백업 불러오기</button></div>
   <p class="note">백업에는 기록·단어장·설정이 들어가며 API 키는 제외됩니다.</p>
-  <p class="note">버전 v3.2</p>`);
+  <p class="note">버전 v3.3 <button class="mini" id="sUpd">🔄 최신 버전으로 업데이트</button></p>`);
+  $('sUpd').onclick = forceUpdate;
   const read = () => ({ counselor: $('sName').value.trim(), gemini: $('sGem').value.trim(), openai: $('sOai').value.trim(),
     limit: Number($('sLim').value) || 0, rate: Number($('sRate').value), realtimeModel: $('sRt').value });
   $('sBak').onclick = () => {
@@ -197,6 +198,10 @@ function openSettings() {
   };
 }
 
+async function forceUpdate() {
+  try { for (const k of await caches.keys()) await caches.delete(k); for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister(); } catch {}
+  location.replace(location.pathname + '?v=' + Date.now());
+}
 // ---------- 세션 ----------
 async function startSession(skipConsent) {
   if (!S.settings.gemini && S.engine === 'free') return openSettings();
