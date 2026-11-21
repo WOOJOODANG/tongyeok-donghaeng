@@ -1,6 +1,7 @@
-import { LANGS, KO, DOMAINS, ENGINES, COST_PER_MIN, QUICK, briefingPrompt, translatePrompt } from './config.js?v=35';
-import { openPractice } from './practice.js?v=35';
-import { FreeEngine, EcoEngine, PremiumEngine, QuotaError, KeyError, geminiGenerate, openaiChat } from './engines.js?v=35';
+import { LANGS, KO, DOMAINS, ENGINES, COST_PER_MIN, QUICK, briefingPrompt, translatePrompt } from './config.js?v=40';
+import { openPractice } from './practice.js?v=40';
+import { initExtras, openAccount, openClients, openPhoto, openShare, openOffline, shareBriefToColleague, clientName, canUse, plan, PLANS, memoSave, offlineTranslate, isOffline } from './extras.js?v=40';
+import { FreeEngine, EcoEngine, PremiumEngine, QuotaError, KeyError, geminiGenerate, openaiChat } from './engines.js?v=40';
 
 const $ = id => document.getElementById(id);
 const LS = {
@@ -13,7 +14,7 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 const S = {
   settings: LS.get('settings', { gemini: '', openai: '', limit: 10000, rate: 1.0, realtimeModel: 'gpt-realtime-mini', counselor: '정지훈' }),
   lang: LS.get('lang', 'en'), domain: LS.get('domain', 'general'), engine: LS.get('engine', 'free'),
-  turns: [], engineObj: null, running: false, face: false, consented: false, startedAt: 0,
+  turns: [], engineObj: null, running: false, face: false, consented: false, startedAt: 0, client: null,
 };
 const monthKey = () => new Date().toISOString().slice(0, 7);
 const usage = () => LS.get('usage', {})[monthKey()] || 0;
@@ -41,6 +42,11 @@ function init() {
   renderEngines(); renderUsage(); renderLog();
   $('btnPlay').onclick = () => S.running ? stopSession(true) : startSession();
   $('btnSettings').onclick = openSettings;
+  $('btnMenu').onclick = openMenu;
+  $('clientChip').onclick = e => { if (e.target.classList.contains('x')) return setClient(null); openClients(() => {}); };
+  initExtras({ modal, closeModal, alertModal, key: () => S.settings.gemini, lang: () => S.lang, domain: () => S.domain, speak,
+    currentClient: () => S.client, setClient, openSession, startWithClient: () => startSession(), refresh: () => { renderQuick(); renderPlan(); } });
+  renderPlan(); whatsNew();
   $('btnHistory').onclick = openHistory;
   $('btnPractice').onclick = () => { if (S.running) stopSession(false); if (!S.settings.gemini) return openSettings(); openPractice({ key: () => S.settings.gemini, domain: () => S.domain }); };
   $('btnBig').onclick = () => { document.body.classList.toggle('big'); LS.set('big', document.body.classList.contains('big')); };
@@ -86,6 +92,24 @@ function renderLog() {
   $('partnerLog').innerHTML = S.turns.length ? S.turns.map(t => bubble(t, true)).join('') : `<div class="empty">${esc(pl.welcome)}</div>`;
   $('partnerLog').scrollTop = 1e9;
 }
+// ---------- 공통 번역: 온라인(Gemini/OpenAI) → 실패/오프라인 시 저장된 번역·기기 내장 번역 ----------
+async function translateText(fromCode, toCode, text) {
+  const from = fromCode === 'ko' ? KO : LANGS[fromCode], to = toCode === 'ko' ? KO : LANGS[toCode];
+  if (!isOffline()) {
+    try {
+      let tr;
+      if (S.settings.gemini) tr = await geminiGenerate(S.settings.gemini, translatePrompt(S.domain, from.native, to.native), text);
+      else if (hasOpenAI()) tr = await openaiChat(S.settings.openai, translatePrompt(S.domain, from.native, to.native), text);
+      else throw new KeyError('⚙️ 설정에서 Gemini 키를 입력하세요.');
+      memoSave(fromCode, toCode, text, tr); return tr;
+    } catch (e) {
+      if (e instanceof KeyError || navigator.onLine) { const off = await offlineTranslate(fromCode, toCode, text); if (off && !(e instanceof KeyError)) return off.text + ' ⓞ'; throw e; }
+    }
+  }
+  const off = await offlineTranslate(fromCode, toCode, text);
+  if (off) return off.text + ' ⓞ';
+  return '(오프라인 — 번역 불가) ' + text;
+}
 // ---------- 글 입력 / 자주 쓰는 문구 / 다시 듣기 ----------
 function speak(text, bcp) {
   speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = bcp; u.rate = S.settings.rate || 1;
@@ -95,10 +119,8 @@ function speak(text, bcp) {
 async function textTurn(who, text) {
   const pl = LANGS[S.lang]; const from = who === 'me' ? KO : pl, to = who === 'me' ? pl : KO;
   try {
-    let tr;
-    if (S.settings.gemini) tr = await geminiGenerate(S.settings.gemini, translatePrompt(S.domain, from.native, to.native), text);
-    else if (hasOpenAI()) tr = await openaiChat(S.settings.openai, translatePrompt(S.domain, from.native, to.native), text);
-    else return openSettings();
+    if (!S.settings.gemini && !hasOpenAI() && !isOffline()) return openSettings();
+    const tr = await translateText(who === 'me' ? 'ko' : S.lang, who === 'me' ? S.lang : 'ko', text);
     S.turns.push({ speaker: who, src: text, dst: tr, t: Date.now() }); renderLog(); autosave();
     if (!S.running || S.engine === 'free') speak(tr, to.bcp);
   } catch (e) { alertModal('⚠️ 번역 실패', esc(e.message)); }
@@ -168,7 +190,7 @@ function openSettings() {
   <h4>💾 백업 / 복원 (폰 교체·초기화 대비)</h4>
   <div class="row"><button class="btn gray" id="sBak">백업 파일 받기</button><button class="btn gray" id="sRes">백업 불러오기</button></div>
   <p class="note">백업에는 기록·단어장·설정이 들어가며 API 키는 제외됩니다.</p>
-  <p class="note">버전 v3.5 <button class="mini" id="sUpd">🔄 최신 버전으로 업데이트</button></p>`);
+  <p class="note">버전 v4.0 <button class="mini" id="sUpd">🔄 최신 버전으로 업데이트</button></p>`);
   $('sUpd').onclick = forceUpdate;
   const read = () => ({ counselor: $('sName').value.trim(), gemini: $('sGem').value.trim(), openai: $('sOai').value.trim(),
     limit: Number($('sLim').value) || 0, rate: Number($('sRate').value), realtimeModel: $('sRt').value });
@@ -198,17 +220,48 @@ function openSettings() {
   };
 }
 
+function quickLists() { return [LS.get('myQuick', []), ...Object.values(QUICK)]; }
+function openMenu() {
+  modal(`<h3>☰ 메뉴</h3><div class="menu">
+    <button data-m="clients">👤 고객 관리</button><button data-m="photo">📷 사진 번역 (처방전·서류)</button>
+    <button data-m="practice">🎓 외국어 연습</button><button data-m="history">🗂 상담 기록</button>
+    <button data-m="share">📤 FC·학생에게 공유</button><button data-m="offline">📴 인터넷 없이 통역</button>
+    <button data-m="account">⭐ 계정 · 요금제 (${PLANS[plan()].name})</button><button data-m="settings">⚙️ 설정</button>
+    <button data-m="news">🆕 새 기능 안내</button><button data-m="update">🔄 최신 버전으로 업데이트</button></div>
+    <div class="row"><button class="btn gray" id="mnX">닫기</button></div>`);
+  const act = { clients: () => openClients(), photo: () => S.settings.gemini ? openPhoto() : openSettings(), practice: () => $('btnPractice').click(), history: openHistory,
+    share: openShare, offline: () => openOffline(quickLists()), account: openAccount, settings: openSettings, news: () => whatsNew(true), update: forceUpdate };
+  document.querySelectorAll('[data-m]').forEach(b => b.onclick = () => act[b.dataset.m]());
+  $('mnX').onclick = closeModal;
+}
+function renderPlan() { const p = plan(); $('planBadge').textContent = p === 'free' ? '무료' : PLANS[p].name; $('planBadge').className = 'planBadge ' + p; }
+const APP_VER = '4.0';
+function whatsNew(force) {
+  if (!force && LS.get('seenVer', '') === APP_VER) return;
+  LS.set('seenVer', APP_VER);
+  setTimeout(() => modal(`<h3>🆕 v${APP_VER} 새 기능</h3><ul class="news">
+    <li>📷 <b>사진 번역</b> — 처방전·진단서·보험/세무 서류를 찍으면 번역 + 핵심 항목 + 주의사항</li>
+    <li>👤 <b>고객 관리</b> — 상담 시작 시 고객 선택 → 기록·사진·브리핑이 고객별로 모임, 전체 상담 흐름 요약</li>
+    <li>📤 <b>FC·학생 공유</b> — 용어집·문구·단어장을 링크로 전달, 브리핑을 개인정보 없이 동료에게 공유</li>
+    <li>📴 <b>오프라인 통역</b> — 번역한 문장 자동 저장 + 문구 오프라인 팩, 인터넷 끊기면 자동 전환</li>
+    <li>⭐ <b>계정·요금제</b> — 무료/Pro/기관 (현재 테스트 결제, 본인은 소유자 모드로 전부 무제한)</li>
+    <li>🔧 Gemini 모델 자동 선택·혼잡 시 자동 재시도, 앱 업데이트 버튼</li></ul>
+    <p class="note">왼쪽 위 ☰ 메뉴에서 모두 사용할 수 있어요.</p><div class="row"><button class="btn" id="wnOk">시작하기</button></div>`), force ? 0 : 900);
+  setTimeout(() => { const b = $('wnOk'); if (b) b.onclick = closeModal; }, force ? 50 : 1000);
+}
 async function forceUpdate() {
   try { for (const k of await caches.keys()) await caches.delete(k); for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister(); } catch {}
   location.replace(location.pathname + '?v=' + Date.now());
 }
 // ---------- 세션 ----------
 async function startSession(skipConsent) {
-  if (!S.settings.gemini && S.engine === 'free') return openSettings();
+  if (!S.settings.gemini && S.engine === 'free' && !isOffline()) return openSettings();
+  if (isOffline() && S.engine !== 'free') selectEngine('free', true);
   if (!S.consented && !skipConsent) return consentModal();
   const opts = {
     partner: S.lang, domain: S.domain, rate: S.settings.rate, realtimeModel: S.settings.realtimeModel,
     keys: { gemini: S.settings.gemini, openai: S.settings.openai },
+    translate: translateText,
     onTurn: t => { S.turns.push(t); renderLog(); autosave(); },
     onStatus: setStatus,
     onInterim: (side, txt) => { $('interim').textContent = txt ? (side === 'ko' ? '나: ' : '상대: ') + txt : ''; },
@@ -244,8 +297,16 @@ function stopSession(ask) {
     $('mN').onclick = () => { newSession(); closeModal(); };
   }
 }
-function newSession() { S.turns = []; S.startedAt = 0; S.consented = false; S.sessionId = null; renderLog(); }
+function newSession() { S.turns = []; S.startedAt = 0; S.consented = false; S.sessionId = null; S.brief = null; S.clientAsked = false; setClient(null); renderLog(); }
+function setClient(c) {
+  S.client = c || null;
+  if (c?.lang && LANGS[c.lang]) { S.lang = c.lang; $('selLang').value = c.lang; LS.set('lang', c.lang); renderFace(); }
+  $('clientChip').innerHTML = c ? `👤 <b>${esc(c.name)}</b> <span class="x">✕</span>` : '👤 고객 선택';
+  $('clientChip').classList.toggle('on', !!c);
+  if (S.sessionId) autosave();
+}
 function consentModal() {
+  if (!S.client && !S.turns.length && !S.clientAsked && LS.get('askClient', true) && plan() !== 'free') { S.clientAsked = true; return openClients(() => consentModal()); }
   const pl = LANGS[S.lang];
   modal(`<h3>상대방 동의</h3><p class="note">휴대폰을 상대방에게 보여주세요.</p>
   <p class="consent">${esc(pl.consent)}</p>
@@ -262,9 +323,18 @@ document.addEventListener('visibilitychange', () => { if (S.running && document.
 function autosave() {
   const h = LS.get('history', []);
   if (!S.sessionId) S.sessionId = 's' + Date.now();
-  const rec = { id: S.sessionId, at: S.startedAt || Date.now(), lang: S.lang, domain: S.domain, turns: S.turns, brief: S.brief || null };
+  const rec = { id: S.sessionId, at: S.startedAt || Date.now(), lang: S.lang, domain: S.domain, turns: S.turns, brief: S.brief || null, clientId: S.client?.id || null };
   const i = h.findIndex(x => x.id === rec.id); if (i >= 0) h[i] = { ...h[i], ...rec }; else h.unshift(rec);
   LS.set('history', h.slice(0, 200));
+}
+function openSession(id) {
+  const r = LS.get('history', []).find(x => x.id === id); if (!r) return;
+  if (S.running) stopSession(false);
+  S.turns = r.turns; S.lang = r.lang; S.domain = r.domain; S.sessionId = r.id; S.startedAt = r.at; S.brief = r.brief;
+  $('selLang').value = r.lang; $('selDomain').value = r.domain; renderFace();
+  const c = r.clientId ? JSON.parse(localStorage.getItem('tyd_clients') || '[]').find(x => x.id === r.clientId) : null;
+  S.client = c; $('clientChip').innerHTML = c ? `👤 <b>${esc(c.name)}</b> <span class="x">✕</span>` : '👤 고객 선택'; $('clientChip').classList.toggle('on', !!c);
+  r.brief ? showBriefing(r.brief) : closeModal();
 }
 function openHistory() {
   const h = LS.get('history', []);
@@ -273,15 +343,10 @@ function openHistory() {
   <div id="hList"></div><div class="row"><button class="btn gray" id="hX">닫기</button></div>`);
   const draw = q => {
     const list = h.filter(r => !q || JSON.stringify(r).includes(q));
-    $('hList').innerHTML = list.length ? list.map(r => `<div class="hist"><div><b>${esc(r.brief?.title || DOMAINS[r.domain]?.label)}</b><br>
+    $('hList').innerHTML = list.length ? list.map(r => `<div class="hist"><div><b>${r.clientId ? '👤 ' + esc(clientName(r.clientId)) + ' · ' : ''}${esc(r.brief?.title || DOMAINS[r.domain]?.label)}</b><br>
       <small>${new Date(r.at).toLocaleString('ko-KR')} · ${LANGS[r.lang]?.name} · ${r.turns.length}건</small></div>
       <div><button class="btn" data-o="${r.id}">열기</button> <button class="btn gray" data-d="${r.id}">삭제</button></div></div>`).join('') : '<p class="note">기록이 없습니다.</p>';
-    $('hList').querySelectorAll('[data-o]').forEach(b => b.onclick = () => {
-      const r = h.find(x => x.id === b.dataset.o); if (S.running) stopSession(false);
-      S.turns = r.turns; S.lang = r.lang; S.domain = r.domain; S.sessionId = r.id; S.startedAt = r.at; S.brief = r.brief;
-      $('selLang').value = r.lang; $('selDomain').value = r.domain; renderFace();
-      r.brief ? showBriefing(r.brief) : closeModal();
-    });
+    $('hList').querySelectorAll('[data-o]').forEach(b => b.onclick = () => openSession(b.dataset.o));
     $('hList').querySelectorAll('[data-d]').forEach(b => b.onclick = () => {
       if (!confirm('이 기록을 삭제할까요?')) return;
       const i = h.findIndex(x => x.id === b.dataset.d); h.splice(i, 1); LS.set('history', h); draw($('hQ').value);
@@ -293,10 +358,15 @@ function openHistory() {
 // ---------- 브리핑 ----------
 async function makeBriefing() {
   if (S.running) stopSession(false);
+  if (!canUse('brief')) return;
   modal('<h3>📝 브리핑 작성 중…</h3><p>대화를 요약하고 니즈·최적 제안을 분석하고 있습니다.</p>');
   const pl = LANGS[S.lang];
   const transcript = S.turns.map(t => t.speaker === 'me' ? `[상담자(한국어)] ${t.src}  (통역: ${t.dst})` : `[고객(${pl.name})] ${t.src}  (통역: ${t.dst})`).join('\n');
-  const sys = briefingPrompt(S.domain, pl.native);
+  let sys = briefingPrompt(S.domain, pl.native);
+  if (S.client) {
+    const prev = LS.get('history', []).filter(h => h.clientId === S.client.id && h.id !== S.sessionId && h.brief).slice(0, 3);
+    sys += `\n고객 이름: ${S.client.name} (${S.client.tag || ''}). 메모: ${S.client.memo || '-'}` + (prev.length ? `\n이전 상담 요약(연속성 반영): ${prev.map(p => p.brief.title + ' - ' + (p.brief.summary || []).join(' ')).join(' | ')}` : '');
+  }
   try {
     let raw;
     if (S.settings.gemini) {
@@ -311,7 +381,7 @@ async function makeBriefing() {
 const li = a => (a && a.length ? `<ul>${a.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="note">-</p>');
 function briefHTML(b, full) {
   const pl = LANGS[b.lang];
-  const meta = `${new Date(b.at).toLocaleString('ko-KR')} · ${DOMAINS[b.domain]?.label} · 한국어↔${pl.name} · 상담자 ${esc(S.settings.counselor)}`;
+  const meta = `${S.client ? '👤 ' + esc(S.client.name) + ' · ' : ''}${new Date(b.at).toLocaleString('ko-KR')} · ${DOMAINS[b.domain]?.label} · 한국어↔${pl.name} · 상담자 ${esc(S.settings.counselor)}`;
   let h = `<div class="brief"><h3>📋 ${esc(b.title)}</h3><p class="note">${meta}</p>
   <h4>핵심 요약</h4>${li(b.summary)}<h4>고객 요청·고민</h4>${li(b.requests)}<h4>합의 사항</h4>${li(b.agreements)}
   <h4>다음 할 일</h4>${li(b.todos)}<h4>확인 필요</h4>${li(b.checks)}
@@ -332,6 +402,7 @@ function showBriefing(b) {
   modal(briefHTML(b) + `
   <div class="row"><button class="btn yellow" id="bShare">💬 카톡 등 공유</button><button class="btn" id="bMail">✉️ 이메일</button></div>
   <div class="row"><button class="btn gray" id="bClient">🌐 고객용 공유</button><button class="btn gray" id="bPdf">📄 PDF 저장</button><button class="btn gray" id="bFile">💾 문서 파일</button><button class="btn gray" id="bCopy">📋 복사</button></div>
+  <div class="row"><button class="btn gray" id="bCol">🤝 동료 FC에게 사례 공유 (개인정보 제외)</button></div>
   <div class="row"><button class="btn gray" id="bX">닫기</button></div>`);
   const share = async (text, title) => {
     if (navigator.share) { try { await navigator.share({ title, text }); return; } catch (e) { if (e.name === 'AbortError') return; } }
@@ -339,6 +410,8 @@ function showBriefing(b) {
   };
   $('bShare').onclick = () => share(briefText(b), b.title);
   $('bClient').onclick = () => share(briefText(b, true), b.title);
+  $('bCol').onclick = () => shareBriefToColleague(b);
+  if (S.client?.email) $('bMail').onclick = () => { location.href = `mailto:${encodeURIComponent(S.client.email)}?subject=${encodeURIComponent(b.title)}&body=${encodeURIComponent(briefText(b, true))}`; };
   $('bMail').onclick = () => { location.href = `mailto:?subject=${encodeURIComponent('[상담 브리핑] ' + b.title)}&body=${encodeURIComponent(briefText(b))}`; };
   $('bCopy').onclick = async () => { await navigator.clipboard.writeText(briefText(b)); $('bCopy').textContent = '✅ 복사됨'; };
   $('bPdf').onclick = () => printDoc(b);

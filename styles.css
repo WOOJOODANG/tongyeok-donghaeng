@@ -80,3 +80,16 @@ footer{display:flex;align-items:center;justify-content:space-between;gap:6px;pad
 .tabs{flex-wrap:nowrap}
 .testMsg{margin-top:10px;padding:10px;border-radius:10px;background:#0b1220;font-size:.9em;line-height:1.6;min-height:1em}.testMsg:empty{display:none}
 .btn:disabled{opacity:.5}
+.brand{display:flex;align-items:center;gap:4px}.brand .icon{padding:2px 6px 2px 0}
+.planBadge{font-size:.6em;padding:2px 7px;border-radius:8px;background:var(--line);font-weight:600}.planBadge.pro{background:#a16207}.planBadge.biz{background:#7c3aed}
+.netBadge{font-size:.6em;padding:2px 7px;border-radius:8px;background:var(--bad)}
+.clientChip{width:100%;text-align:left;background:var(--card);border:1px dashed var(--line);border-radius:10px;padding:7px 10px;margin-bottom:6px;font-size:.85em;color:var(--mut)}
+.clientChip.on{border-style:solid;border-color:var(--ok);color:var(--tx)}.clientChip .x{float:right;color:var(--mut);padding:0 4px}
+.menu{display:grid;grid-template-columns:1fr 1fr;gap:8px}.menu button{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 8px;text-align:left;font-size:.9em}
+.testBadge{background:#422006;color:#fde68a;border-radius:8px;padding:6px 10px;font-size:.8em;margin-bottom:8px}
+.onPlan{border:2px solid var(--ok)}
+.chk{display:block;margin:6px 0;font-size:.9em}.chk input{width:auto;margin-right:6px}
+.thumb{max-width:100%;max-height:220px;border-radius:10px;display:block;margin:6px auto}
+.kv{width:100%;border-collapse:collapse;font-size:.9em}.kv th,.kv td{border-bottom:1px solid var(--line);padding:6px;text-align:left;vertical-align:top}.kv th{width:32%;color:#7dd3fc;font-weight:600}
+.news li{margin:6px 0;line-height:1.5}
+details summary{cursor:pointer;margin:8px 0}

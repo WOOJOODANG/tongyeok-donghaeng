@@ -1,5 +1,5 @@
 // 통역 엔진 3종: free(Web Speech+Gemini) / eco(OpenAI 분할) / premium(OpenAI Realtime)
-import { LANGS, KO, translatePrompt } from './config.js?v=35';
+import { LANGS, KO, translatePrompt } from './config.js?v=40';
 
 export class QuotaError extends Error { constructor(m) { super(m); this.name = 'QuotaError'; } }
 export class KeyError extends Error { constructor(m) { super(m); this.name = 'KeyError'; } }
@@ -114,7 +114,7 @@ export class FreeEngine extends Base {
   }
   async start() {
     if (!FreeEngine.supported()) throw new Error('이 브라우저는 음성인식을 지원하지 않습니다. 갤럭시의 Chrome에서 열어주세요.');
-    if (!this.o.keys.gemini) throw new KeyError('설정에서 Gemini 키를 입력하세요.');
+    if (!this.o.keys.gemini && navigator.onLine) throw new KeyError('설정에서 Gemini 키를 입력하세요.');
     // 마이크 권한 먼저 확보
     const s = await navigator.mediaDevices.getUserMedia({ audio: true }); s.getTracks().forEach(t => t.stop());
     this.voices = speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = () => { this.voices = speechSynthesis.getVoices(); };
@@ -153,9 +153,9 @@ export class FreeEngine extends Base {
     const from = side === 'ko' ? KO : this.pl, to = side === 'ko' ? this.pl : KO;
     this.status('🔄 번역 중…', 'busy');
     try {
-      const tr = await geminiGenerate(this.o.keys.gemini, translatePrompt(this.o.domain, from.native, to.native), text);
+      const tr = this.o.translate ? await this.o.translate(side === 'ko' ? 'ko' : this.o.partner, side === 'ko' ? this.o.partner : 'ko', text) : await geminiGenerate(this.o.keys.gemini, translatePrompt(this.o.domain, from.native, to.native), text);
       this.o.onTurn({ speaker: side === 'ko' ? 'me' : 'partner', src: text, dst: tr, t: Date.now() });
-      await this.speak(tr, to.bcp);
+      await this.speak(tr.replace(/ ⓞ$/, '').replace(/^\(오프라인 — 번역 불가\) /, ''), to.bcp);
     } catch (e) { this.o.onError(e); if (e instanceof KeyError) this.stop(); }
   }
   speak(text, bcp) {

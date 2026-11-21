@@ -1,5 +1,5 @@
-﻿const CACHE = 'tyd-v8';
-const ASSETS = ['./', './index.html', './styles.css?v=35', './app.js?v=35', './engines.js?v=35', './config.js?v=35', './practice.js?v=35', './manifest.webmanifest', './icon.svg'];
+﻿const CACHE = 'tyd-v9';
+const ASSETS = ['./', './index.html', './styles.css?v=40', './app.js?v=40', './engines.js?v=40', './config.js?v=40', './practice.js?v=40', './extras.js?v=40', './manifest.webmanifest', './icon.svg'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' }))))); self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k))))); self.clients.claim(); });
 self.addEventListener('fetch', e => {
