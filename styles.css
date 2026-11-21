@@ -64,3 +64,17 @@ footer{display:flex;align-items:center;justify-content:space-between;gap:6px;pad
 .score{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:.85em}.score span{width:64px}.barBg{flex:1;height:9px;background:var(--line);border-radius:6px;overflow:hidden}.barFg{height:100%}
 .stressed{font-family:monospace;background:#0b1220;padding:8px;border-radius:8px;letter-spacing:.3px}
 .callLog{min-height:200px}
+.quick{display:flex;gap:6px;overflow-x:auto;padding:4px 0;scrollbar-width:none}
+.chip{white-space:nowrap;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:6px 11px;font-size:.78em}
+.chip.add{color:var(--me)}
+.typeRow{display:flex;gap:6px;margin:4px 0}.typeRow select{width:78px;padding:6px}.typeRow input{flex:1;padding:8px}
+.replay{float:right;margin-top:-2px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin:8px 0}
+.gcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:left;display:flex;flex-direction:column;gap:3px}
+.gcard b{font-size:1.05em}.gcard small{color:var(--mut);font-size:.72em}
+.lessonNav{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px}
+.tabs.sub button{font-size:.8em;padding:6px}
+.flash{background:var(--card);border-radius:14px;padding:20px;text-align:center;margin-top:10px}
+.fq{font-size:2em;font-weight:800;margin:14px 0;color:#7dd3fc}.fa{font-size:1.3em;margin:8px 0}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:8px}.opts .btn{min-width:0;font-weight:500}
+.tabs{flex-wrap:nowrap}

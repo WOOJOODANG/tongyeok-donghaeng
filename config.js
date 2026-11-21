@@ -15,6 +15,18 @@ export const LANGS = {
   es: { name: '스페인어', native: 'Español', bcp: 'es-ES',
         consent: 'Esta conversación será interpretada por IA en tiempo real. Solo se guarda el texto en este dispositivo. ¿Está de acuerdo?',
         agree: 'Acepto', welcome: 'Hola, hablaré a través de una aplicación de interpretación.' },
+  vi: { name: '베트남어', native: 'Tiếng Việt', bcp: 'vi-VN',
+        consent: 'Cuộc trò chuyện này sẽ được AI phiên dịch theo thời gian thực. Chỉ văn bản được lưu trên thiết bị này. Bạn có đồng ý không?',
+        agree: 'Tôi đồng ý', welcome: 'Xin chào, tôi sẽ nói chuyện qua ứng dụng phiên dịch.' },
+  fr: { name: '프랑스어', native: 'Français', bcp: 'fr-FR',
+        consent: "Cette conversation sera interprétée par l'IA en temps réel. Seul le texte est conservé sur cet appareil. Êtes-vous d'accord ?",
+        agree: "J'accepte", welcome: "Bonjour, je vais parler via une application d'interprétation." },
+  de: { name: '독일어', native: 'Deutsch', bcp: 'de-DE',
+        consent: 'Dieses Gespräch wird in Echtzeit von KI gedolmetscht. Nur der Text wird auf diesem Gerät gespeichert. Sind Sie einverstanden?',
+        agree: 'Einverstanden', welcome: 'Hallo, ich spreche über eine Dolmetscher-App.' },
+  th: { name: '태국어', native: 'ภาษาไทย', bcp: 'th-TH',
+        consent: 'บทสนทนานี้จะถูกแปลโดย AI แบบเรียลไทม์ จะบันทึกเฉพาะข้อความบนอุปกรณ์นี้ คุณยินยอมหรือไม่?',
+        agree: 'ยินยอม', welcome: 'สวัสดีครับ ผมจะพูดผ่านแอปล่าม' },
 };
 export const KO = { name: '한국어', native: '한국어', bcp: 'ko-KR' };
 
@@ -37,8 +49,24 @@ export const ENGINES = {
   premium: { label: '③ 프리미엄', desc: 'OpenAI Realtime · 약 100~300원/분 · ~1초' },
 };
 
+// 자주 쓰는 문구 (한국어 → 탭하면 번역·재생)
+export const QUICK = {
+  general: ['안녕하세요, 만나서 반갑습니다.', '천천히 다시 한 번 말씀해 주시겠어요?', '잠시만 기다려 주세요.', '이해하셨나요?', '감사합니다. 좋은 하루 되세요.'],
+  pt: ['어디가 아프세요? 손으로 가리켜 주세요.', '통증을 0부터 10까지 숫자로 말씀해 주세요.', '언제부터 아프셨어요?', '이 동작을 할 때 아프면 말씀해 주세요.', '천천히 숨을 내쉬면서 힘을 빼세요.', '이 운동을 하루 3번, 10회씩 해주세요.', '다음 예약은 언제가 편하세요?'],
+  ins: ['현재 가입하신 보험이 있으신가요?', '최근 5년 내 병원 치료나 수술 이력이 있으신가요?', '월 보험료는 얼마 정도 생각하세요?', '이 부분은 보장이 되지 않습니다.', '서류를 이메일로 보내드려도 될까요?', '외국인등록증을 보여주시겠어요?'],
+  tax: ['한국에 거주하신 기간이 어떻게 되시나요?', '해외에 있는 재산도 있으신가요?', '증여는 10년 단위로 합산됩니다.', '신고 기한은 이번 달 말일까지입니다.', '필요한 서류 목록을 보내드리겠습니다.', '매달 영수증을 보내주시면 장부를 정리해 드립니다.'],
+};
+
+// 사용자 용어집 (설정에서 추가) → 번역 프롬프트에 자동 반영
+export function glossaryText() {
+  try {
+    const g = JSON.parse(localStorage.getItem('tyd_glossary') || '[]');
+    return g.length ? `\nAlways use this glossary (Korean = preferred term): ${g.map(x => `${x.ko} = ${x.en}`).join('; ')}.` : '';
+  } catch { return ''; }
+}
+
 export function translatePrompt(domainKey, fromName, toName) {
-  return `You are a professional live interpreter. ${DOMAINS[domainKey].prompt}
+  return `You are a professional live interpreter. ${DOMAINS[domainKey].prompt}${glossaryText()}
 Translate the user's utterance from ${fromName} into ${toName}.
 Output ONLY the translation, natural spoken style, polite register. Keep numbers, names, amounts exact. No explanations, no quotes.`;
 }

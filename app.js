@@ -1,4 +1,4 @@
-﻿import { LANGS, KO, DOMAINS, ENGINES, COST_PER_MIN, briefingPrompt } from './config.js';
+import { LANGS, KO, DOMAINS, ENGINES, COST_PER_MIN, QUICK, briefingPrompt, translatePrompt } from './config.js';
 import { openPractice } from './practice.js';
 import { FreeEngine, EcoEngine, PremiumEngine, QuotaError, KeyError, geminiGenerate, openaiChat } from './engines.js';
 
@@ -33,7 +33,10 @@ function init() {
   $('selDomain').innerHTML = Object.entries(DOMAINS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
   $('selLang').value = S.lang; $('selDomain').value = S.domain;
   $('selLang').onchange = e => { S.lang = e.target.value; LS.set('lang', S.lang); S.consented = false; renderFace(); };
-  $('selDomain').onchange = e => { S.domain = e.target.value; LS.set('domain', S.domain); };
+  $('selDomain').onchange = e => { S.domain = e.target.value; LS.set('domain', S.domain); renderQuick(); };
+  renderQuick();
+  const send = () => { const t = $('typeText').value.trim(); if (!t) return; $('typeText').value = ''; textTurn($('typeWho').value, t); };
+  $('typeSend').onclick = send; $('typeText').onkeydown = e => { if (e.key === 'Enter') send(); };
   if (S.engine !== 'free' && !hasOpenAI()) S.engine = 'free';
   renderEngines(); renderUsage(); renderLog();
   $('btnPlay').onclick = () => S.running ? stopSession(true) : startSession();
@@ -72,15 +75,39 @@ function bubble(t, forPartner) {
     return `<div class="bub ${t.speaker === 'me' ? 'partner' : 'me'}"><div class="src">${esc(sub)}</div><div class="dst">${esc(main)}</div></div>`;
   }
   const main = t.speaker === 'me' ? t.src : t.dst, sub = t.speaker === 'me' ? t.dst : t.src;
-  return `<div class="bub ${t.speaker}"><div class="src">${t.speaker === 'me' ? '나 → ' + pl.name : pl.name + ' 원문'}: ${esc(sub)}</div><div class="dst">${esc(main)}</div></div>`;
+  return `<div class="bub ${t.speaker}"><div class="src">${t.speaker === 'me' ? '나 → ' + pl.name : pl.name + ' 원문'}: ${esc(sub)}</div><div class="dst">${esc(main)}</div><button class="mini replay" data-replay="${S.turns.indexOf(t)}">🔊</button></div>`;
 }
 function renderLog() {
   const pl = LANGS[S.lang];
   $('log').innerHTML = S.turns.length ? S.turns.map(t => bubble(t)).join('') :
     `<div class="empty">▶ 를 누르고 평소처럼 대화하세요.<br>한국어 → ${pl.name} / ${pl.name} → 한국어로<br>자동 통역되어 들립니다.<br><br>■ 를 누를 때까지 계속됩니다.</div>`;
   $('log').scrollTop = 1e9;
+  $('log').querySelectorAll('[data-replay]').forEach(b => b.onclick = () => { const t = S.turns[b.dataset.replay]; speak(t.dst, t.speaker === 'me' ? pl.bcp : KO.bcp); });
   $('partnerLog').innerHTML = S.turns.length ? S.turns.map(t => bubble(t, true)).join('') : `<div class="empty">${esc(pl.welcome)}</div>`;
   $('partnerLog').scrollTop = 1e9;
+}
+// ---------- 글 입력 / 자주 쓰는 문구 / 다시 듣기 ----------
+function speak(text, bcp) {
+  speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = bcp; u.rate = S.settings.rate || 1;
+  const v = speechSynthesis.getVoices().find(v => v.lang.replace('_', '-').startsWith(bcp.slice(0, 2))); if (v) u.voice = v;
+  speechSynthesis.speak(u);
+}
+async function textTurn(who, text) {
+  const pl = LANGS[S.lang]; const from = who === 'me' ? KO : pl, to = who === 'me' ? pl : KO;
+  try {
+    let tr;
+    if (S.settings.gemini) tr = await geminiGenerate(S.settings.gemini, translatePrompt(S.domain, from.native, to.native), text);
+    else if (hasOpenAI()) tr = await openaiChat(S.settings.openai, translatePrompt(S.domain, from.native, to.native), text);
+    else return openSettings();
+    S.turns.push({ speaker: who, src: text, dst: tr, t: Date.now() }); renderLog(); autosave();
+    if (!S.running || S.engine === 'free') speak(tr, to.bcp);
+  } catch (e) { alertModal('⚠️ 번역 실패', esc(e.message)); }
+}
+function renderQuick() {
+  const list = [...LS.get('myQuick', []), ...(QUICK[S.domain] || []), ...(S.domain !== 'general' ? QUICK.general.slice(0, 2) : [])];
+  $('quick').innerHTML = list.map(q => `<button class="chip">${esc(q)}</button>`).join('') + '<button class="chip add" id="qAdd">＋</button>';
+  $('quick').querySelectorAll('.chip:not(.add)').forEach(b => b.onclick = () => textTurn('me', b.textContent));
+  $('qAdd').onclick = () => { const t = prompt('자주 쓰는 문구(한국어)를 입력하세요'); if (t) { const m = LS.get('myQuick', []); m.unshift(t.trim()); LS.set('myQuick', m.slice(0, 20)); renderQuick(); } };
 }
 function renderFace() {
   $('partnerPane').classList.toggle('hidden', !S.face);
@@ -134,10 +161,28 @@ function openSettings() {
   <p class="note">🔐 키는 이 기기(브라우저)에만 저장되며 어디에도 전송·업로드되지 않습니다(각 AI 회사 호출 제외).</p>
   <div class="row"><button class="btn" id="sSave">저장</button><button class="btn gray" id="sTest">키 테스트</button><button class="btn gray" id="sX">닫기</button></div>
   <div class="row"><button class="btn gray" id="sReset">이번 달 사용액 초기화</button></div>
+  <h4>📒 나만의 용어집 (통역에 항상 적용)</h4>
+  <p class="note">한 줄에 하나씩: 한국어 = 원하는 번역 (예: 도수치료 = manual therapy)</p>
+  <textarea id="sGlo" rows="4">${esc(LS.get('glossary', []).map(g => g.ko + ' = ' + g.en).join('\n'))}</textarea>
+  <h4>💾 백업 / 복원 (폰 교체·초기화 대비)</h4>
+  <div class="row"><button class="btn gray" id="sBak">백업 파일 받기</button><button class="btn gray" id="sRes">백업 불러오기</button></div>
+  <p class="note">백업에는 기록·단어장·설정이 들어가며 API 키는 제외됩니다.</p>
   <p id="sMsg" class="note"></p>`);
   const read = () => ({ counselor: $('sName').value.trim(), gemini: $('sGem').value.trim(), openai: $('sOai').value.trim(),
     limit: Number($('sLim').value) || 0, rate: Number($('sRate').value), realtimeModel: $('sRt').value });
-  $('sSave').onclick = () => { S.settings = read(); LS.set('settings', S.settings); if (S.engine !== 'free' && !hasOpenAI()) S.engine = 'free'; renderEngines(); renderUsage(); closeModal(); };
+  $('sBak').onclick = () => {
+    const data = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('tyd_') && !k.startsWith('tyd_daily_') && !k.startsWith('tyd_course_')) data[k] = localStorage.getItem(k); }
+    const st = JSON.parse(data.tyd_settings || '{}'); delete st.gemini; delete st.openai; data.tyd_settings = JSON.stringify(st);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' })); a.download = `통역동행_백업_${new Date().toISOString().slice(0, 10)}.json`; a.click();
+  };
+  $('sRes').onclick = () => {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json';
+    inp.onchange = async () => { try { const d = JSON.parse(await inp.files[0].text()); const keep = S.settings; Object.entries(d).forEach(([k, v]) => k.startsWith('tyd_') && localStorage.setItem(k, v)); const st = JSON.parse(d.tyd_settings || '{}'); LS.set('settings', { ...st, gemini: keep.gemini, openai: keep.openai }); alert('복원 완료! 새로고침합니다.'); location.reload(); } catch { alert('올바른 백업 파일이 아닙니다.'); } };
+    inp.click();
+  };
+  $('sSave').onclick = () => {
+    LS.set('glossary', $('sGlo').value.split('\n').map(l => l.split('=')).filter(p => p.length >= 2 && p[0].trim() && p[1].trim()).map(p => ({ ko: p[0].trim(), en: p.slice(1).join('=').trim() })));
+    S.settings = read(); LS.set('settings', S.settings); if (S.engine !== 'free' && !hasOpenAI()) S.engine = 'free'; renderEngines(); renderUsage(); closeModal(); };
   $('sX').onclick = closeModal;
   $('sReset').onclick = () => { const u = LS.get('usage', {}); delete u[monthKey()]; LS.set('usage', u); renderUsage(); $('sMsg').textContent = '초기화했습니다.'; };
   $('sTest').onclick = async () => {
