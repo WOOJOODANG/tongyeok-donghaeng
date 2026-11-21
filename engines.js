@@ -1,5 +1,5 @@
 // 통역 엔진 3종: free(Web Speech+Gemini) / eco(OpenAI 분할) / premium(OpenAI Realtime)
-import { LANGS, KO, translatePrompt } from './config.js';
+import { LANGS, KO, translatePrompt } from './config.js?v=35';
 
 export class QuotaError extends Error { constructor(m) { super(m); this.name = 'QuotaError'; } }
 export class KeyError extends Error { constructor(m) { super(m); this.name = 'KeyError'; } }

@@ -1,7 +1,7 @@
 // 🎓 외국어 연습 (모든 지원 언어 공통)
 // 탭: 오늘의 단어 / 오늘의 문장 / 단계별 코스(초·중·고·대·비즈니스·생활) / 한→외 만들기 / 전화회화 / 단어장·복습·퀴즈
-import { DOMAINS, LANGS } from './config.js';
-import { geminiGenerate, geminiParts } from './engines.js';
+import { DOMAINS, LANGS } from './config.js?v=35';
+import { geminiGenerate, geminiParts } from './engines.js?v=35';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
