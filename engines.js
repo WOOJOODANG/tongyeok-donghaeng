@@ -17,26 +17,56 @@ async function checkOpenAI(res) {
 // ---------- 텍스트 번역 / 생성 ----------
 export function geminiGenerate(key, system, text, opts = {}) { return geminiParts(key, system, [{ text }], opts); }
 // parts: [{text}] 또는 [{inlineData:{mimeType,data}}] — 음성 평가에도 사용
+// 모델 자동 선택: 구글이 모델을 바꿔도 동작하도록 후보를 차례로 시도하고, 실패 시 사용 가능 목록에서 자동 탐색
+const GEMINI_CANDIDATES = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3-flash', 'gemini-2.5-flash'];
+async function discoverGemini(key) {
+  const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': key } });
+  if (!r.ok) return null;
+  const list = ((await r.json()).models || []).filter(m => (m.supportedGenerationMethods || []).includes('generateContent')).map(m => m.name.replace('models/', ''));
+  const flash = list.filter(n => /flash/.test(n) && !/lite|image|tts|live|audio|thinking|exp/.test(n));
+  const ver = n => parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || 0);
+  flash.sort((x, y) => ver(y) - ver(x) || (/latest/.test(x) ? -1 : 1));
+  return flash[0] || list.find(n => /gemini/.test(n)) || null;
+}
+async function geminiCall(key, model, system, parts, json, thinking) {
+  const gc = { temperature: 0.2, ...(json ? { responseMimeType: 'application/json' } : {}) };
+  if (thinking) gc.thinkingConfig = { thinkingBudget: 0 };
+  return fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+    body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts }], generationConfig: gc }),
+  });
+}
 export async function geminiParts(key, system, parts, { json = false } = {}) {
   if (!key) throw new KeyError('⚙️ 설정에서 Gemini 키를 입력하세요.');
-  const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: 'user', parts }],
-      generationConfig: { temperature: 0.2, thinkingConfig: { thinkingBudget: 0 }, ...(json ? { responseMimeType: 'application/json' } : {}) },
-    }),
-  });
-  if (!res.ok) {
+  const saved = localStorage.getItem('tyd_geminiModel');
+  const tried = new Set(); let queue = [...new Set([saved, ...GEMINI_CANDIDATES].filter(Boolean))], discovered = false, lastMsg = '';
+  while (queue.length) {
+    const model = queue.shift(); if (tried.has(model)) continue; tried.add(model);
+    let res = await geminiCall(key, model, system, parts, json, true);
+    if (res.status === 400) { // thinkingConfig 미지원 모델이면 빼고 재시도
+      const b = await res.clone().json().catch(() => ({})); const m = b?.error?.message || '';
+      if (/API key/i.test(m)) throw new KeyError('Gemini 키가 올바르지 않습니다.');
+      if (/thinking/i.test(m)) res = await geminiCall(key, model, system, parts, json, false);
+    }
+    if (res.ok) {
+      if (saved !== model) localStorage.setItem('tyd_geminiModel', model);
+      const d = await res.json();
+      return (d.candidates?.[0]?.content?.parts || []).filter(p => !p.thought).map(p => p.text || '').join('').trim();
+    }
     let b = {}; try { b = await res.json(); } catch {}
-    const m = b?.error?.message || res.statusText;
-    if (res.status === 400 && /API key/i.test(m) || res.status === 403) throw new KeyError('Gemini 키가 올바르지 않습니다.');
+    lastMsg = b?.error?.message || res.statusText;
+    if (res.status === 403 || (res.status === 400 && /API key/i.test(lastMsg))) throw new KeyError('Gemini 키가 올바르지 않습니다.');
     if (res.status === 429) throw new Error('Gemini 무료 사용량을 잠시 초과했습니다. 1분 후 다시 시도하세요.');
-    throw new Error(`Gemini 오류 (${res.status}): ${m}`);
+    if (res.status === 404 || res.status === 400) {
+      if (saved === model) localStorage.removeItem('tyd_geminiModel');
+      const hint = (lastMsg.match(/models\/([\w.-]+)/g) || []).map(x => x.replace('models/', '')).filter(x => x !== model);
+      queue.unshift(...hint);
+      if (!queue.length && !discovered) { discovered = true; const m = await discoverGemini(key); if (m) queue.push(m); }
+      continue;
+    }
+    throw new Error(`Gemini 오류 (${res.status}): ${lastMsg}`);
   }
-  const d = await res.json();
-  return (d.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').trim();
+  throw new Error('사용 가능한 Gemini 모델을 찾지 못했습니다: ' + lastMsg);
 }
 
 export async function openaiChat(key, system, text, { json = false, model = 'gpt-4o-mini' } = {}) {

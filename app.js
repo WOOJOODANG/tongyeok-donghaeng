@@ -168,7 +168,7 @@ function openSettings() {
   <h4>💾 백업 / 복원 (폰 교체·초기화 대비)</h4>
   <div class="row"><button class="btn gray" id="sBak">백업 파일 받기</button><button class="btn gray" id="sRes">백업 불러오기</button></div>
   <p class="note">백업에는 기록·단어장·설정이 들어가며 API 키는 제외됩니다.</p>
-  <p class="note">버전 v3.1</p>`);
+  <p class="note">버전 v3.2</p>`);
   const read = () => ({ counselor: $('sName').value.trim(), gemini: $('sGem').value.trim(), openai: $('sOai').value.trim(),
     limit: Number($('sLim').value) || 0, rate: Number($('sRate').value), realtimeModel: $('sRt').value });
   $('sBak').onclick = () => {
@@ -189,9 +189,9 @@ function openSettings() {
   $('sTest').onclick = async () => {
     const v = read(); const out = [];
     $('sMsg').textContent = '⏳ 테스트 중… (최대 10초)'; $('sTest').disabled = true;
-    if (v.gemini) { try { out.push('Gemini ✅ ' + await geminiGenerate(v.gemini, 'Translate to English. Output only translation.', '안녕하세요')); } catch (e) { out.push('Gemini ❌ ' + e.message); } }
+    if (v.gemini) { try { out.push('Gemini ✅ ' + await geminiGenerate(v.gemini, 'Translate to English. Output only translation.', '안녕하세요') + ' (모델: ' + localStorage.getItem('tyd_geminiModel') + ')'); } catch (e) { out.push('Gemini ❌ ' + e.message); } }
     else out.push('Gemini: 키 없음');
-    if (v.openai) { try { await openaiChat(v.openai, 'Reply OK', 'ping'); out.push('OpenAI ✅ 사용 가능(잔액 있음)'); } catch (e) { out.push('OpenAI ❌ ' + e.message); } }
+    if (v.openai) { try { await openaiChat(v.openai, 'Reply OK', 'ping'); out.push('OpenAI ✅ 사용 가능(잔액 있음)'); } catch (e) { out.push('OpenAI ❌ ' + e.message + (e.name === 'KeyError' ? ' → 유료 모드를 안 쓰시면 OpenAI 칸을 비워두세요.' : '')); } }
     else out.push('OpenAI: 키 없음 (유료 모드 잠금)');
     $('sMsg').innerHTML = out.map(esc).join('<br>'); $('sTest').disabled = false; $('sMsg').scrollIntoView({ block: 'center', behavior: 'smooth' });
   };
