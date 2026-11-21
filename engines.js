@@ -15,13 +15,16 @@ async function checkOpenAI(res) {
 }
 
 // ---------- 텍스트 번역 / 생성 ----------
-export async function geminiGenerate(key, system, text, { json = false } = {}) {
+export function geminiGenerate(key, system, text, opts = {}) { return geminiParts(key, system, [{ text }], opts); }
+// parts: [{text}] 또는 [{inlineData:{mimeType,data}}] — 음성 평가에도 사용
+export async function geminiParts(key, system, parts, { json = false } = {}) {
+  if (!key) throw new KeyError('⚙️ 설정에서 Gemini 키를 입력하세요.');
   const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: 'user', parts: [{ text }] }],
+      contents: [{ role: 'user', parts }],
       generationConfig: { temperature: 0.2, thinkingConfig: { thinkingBudget: 0 }, ...(json ? { responseMimeType: 'application/json' } : {}) },
     }),
   });

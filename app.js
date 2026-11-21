@@ -1,4 +1,5 @@
-import { LANGS, KO, DOMAINS, ENGINES, COST_PER_MIN, briefingPrompt } from './config.js';
+﻿import { LANGS, KO, DOMAINS, ENGINES, COST_PER_MIN, briefingPrompt } from './config.js';
+import { openPractice } from './practice.js';
 import { FreeEngine, EcoEngine, PremiumEngine, QuotaError, KeyError, geminiGenerate, openaiChat } from './engines.js';
 
 const $ = id => document.getElementById(id);
@@ -38,6 +39,7 @@ function init() {
   $('btnPlay').onclick = () => S.running ? stopSession(true) : startSession();
   $('btnSettings').onclick = openSettings;
   $('btnHistory').onclick = openHistory;
+  $('btnPractice').onclick = () => { if (S.running) stopSession(false); if (!S.settings.gemini) return openSettings(); openPractice({ key: () => S.settings.gemini, domain: () => S.domain }); };
   $('btnBig').onclick = () => { document.body.classList.toggle('big'); LS.set('big', document.body.classList.contains('big')); };
   if (LS.get('big', false)) document.body.classList.add('big');
   $('btnFace').onclick = () => { S.face = !S.face; renderFace(); };
